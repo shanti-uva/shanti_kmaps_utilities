@@ -1,0 +1,74 @@
+<?php
+
+/**
+ * @file drupalcons.module
+ * Demo module for Session #FlyViews. Views and Page Manager (CTools) integration with the #FlyViews Source website.
+ */
+
+
+/**
+ * Implements hook_menu().
+ */
+function shanti_kmaps_utils_menu() {
+  $items = array();
+  $items['admin/config/services/shanti_kmaps_utils'] = array(
+    'title' => 'SHANTI KMaps Utilities settings',
+    'description' => t('Settings for SHANTI KMaps API, eg. endpoint URL etc.'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('shanti_kmaps_utils_admin_form'),
+    'access arguments' => array('administer shanti_kmaps_utils'),
+    'file' => 'shanti_kmaps_utils.admin.inc',
+  );
+  $items['shanti_kmaps_utils/autocomplete-form'] = array(
+    'title' => 'KMaps Autocomplete Test Form',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('shanti_kmaps_utils_autocomplete_test_form'),
+    'access arguments' => array('administer shanti_kmaps_utils'),
+  );
+  $items['shanti_kmaps_utils/autocomplete-func'] = array(
+    'title' => 'KMaps Autocomplete Test Function',
+    'page callback' => 'shanti_kmaps_utils_autocomplete_test_func',
+    'access arguments' => array('administer shanti_kmaps_utils'),
+    'type' => MENU_CALLBACK,  
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function shanti_kmaps_utils_permission() {
+  return array(
+    'administer shanti_kmaps_utils' => array(
+      'title' => t('Administer SHANIT KMaps Utilities'),
+    ),
+  );
+}
+
+
+function shanti_kmaps_utils_autocomplete_test_form() {
+  $form = array();
+  $form['kmap_term'] = array(
+    '#description' => t('Enter a KMap search term'),
+    '#type' => 'textfield',
+    '#autocomplete_path' => 'shanti_kmaps_utils/autocomplete-func',
+    '#maxlength' => 1024,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Test',
+  );
+  return $form;
+}
+
+function shanti_kmaps_utils_autocomplete_test_func($string) {
+  $request = new KMapsAPI('subjects');
+  $matches = $request->searchByName($string); // Need to rename this method and add more
+  drupal_json_output($matches);
+}
+
+
+
+
+
+

@@ -1,0 +1,7 @@
+name = SHANTI KMaps Utilities
+description = Basic utilities for use by other KMaps modules
+core = 7.x
+package = SHANTI
+
+files[] = shanti_kmaps_utils.api.inc
+files[] = shanti_kmaps_utils.module
