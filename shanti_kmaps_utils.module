@@ -5,7 +5,6 @@
  * Demo module for Session #FlyViews. Views and Page Manager (CTools) integration with the #FlyViews Source website.
  */
 
-
 /**
  * Implements hook_menu().
  */
@@ -31,6 +30,20 @@ function shanti_kmaps_utils_menu() {
     'access arguments' => array('administer shanti_kmaps_utils'),
     'type' => MENU_CALLBACK,  
   );
+  $items['shanti_kmaps_utils/autocomplete/%/%'] = array(
+    'title' => 'KMaps Autocomplete Test Function',
+    'page callback' => 'shanti_kmaps_utils_autocomplete_func',
+    'page arguments' => array(2,3),
+    //'access arguments' => array('administer shanti_kmaps_utils'),
+    'type' => MENU_CALLBACK,  
+  );
+  $items['shanti_kmaps_utils/test/%/%/%/%/%'] = array(
+    'title' => 'KMaps Autocomplete Test Function',
+    'page callback' => 'shanti_kmaps_utils_test',
+    'page arguments' => array(2,3,4,5,6),
+    'access arguments' => array('administer shanti_kmaps_utils'),
+    'type' => MENU_CALLBACK,  
+  );
   return $items;
 }
 
@@ -44,7 +57,6 @@ function shanti_kmaps_utils_permission() {
     ),
   );
 }
-
 
 function shanti_kmaps_utils_autocomplete_test_form() {
   $form = array();
@@ -67,7 +79,39 @@ function shanti_kmaps_utils_autocomplete_test_func($string) {
   drupal_json_output($matches);
 }
 
+function shanti_kmaps_utils_autocomplete_func($server = 'production', $domain = 'subjects') {
+  if (($server == 'production' || $server = 'development') && ($domain == 'subjects' || $domain == 'places')) {
+    $request = new KMapsAPI($server, $domain);
+    $matches = $request->searchByName($string); // Need to rename this method and add more
+    drupal_json_output($matches);    
+  } else {
+    // not a valid request
+    return FALSE;
+  }
+}
 
+function shanti_kmaps_utils_test($search, $server = 'production', $domain = 'subjects', $fetch_mode = 'by_fid', $parse_mode = 'autocomplete') {
+  if (   
+          ($server == 'production'       || $server = 'development') 
+      &&  ($parse_mode == 'autocomplete' || $parse_mode == 'raw')
+      &&  ($fetch_mode == 'by_fid'       || $fetch_mode == 'by_name')
+      &&  ($domain == 'subjects'         || $domain == 'places')
+    ) {
+    $request = new KMapsAPI($domain,$server);
+    $fetch_mode == 'by_fid' ? $request->setFetchModeToIDCached() : $request->setFetchModeToName();
+    $fetch_mode == 'by_fid' ? $request->setKMapID($search) : $request->setString($search);
+    $parse_mode == 'autocomplete' ? $request->setParseModeToAutocomplete() : $request->setParseModeToRaw();
+    $request->setFormatToJSON();
+    $parsed_data = $request->execute();    
+    dpm($parsed_data);
+    // Now, collect the KMap IDs and get the info for each item
+    drupal_set_message("$search $server $domain $fetch_mode $parse_mode");
+    return "SUCCESS " . $request->getURL();    
+  } 
+  else {
+    return "FAIL";
+  }
+}
 
 
 

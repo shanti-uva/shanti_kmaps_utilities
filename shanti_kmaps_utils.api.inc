@@ -28,8 +28,9 @@ class KMapsAPI {
   
   const KMAPS_URL_STEM = 'kmaps.virginia.edu/features';
   
-  private $api_url            = ''; // set in constructor
+  private $server             = ''; // set in constructor; 'production' or 'development'
   private $domain             = ''; // set in constructor; 'subjects','places','dev-subjects','dev-places'
+  private $api_url            = ''; // set in constructor
   private $debug_mode         = 0; // or 1
   private $arguments          = array(); // URL arguments for string searches
   private $kmap_string        = '';   
@@ -43,9 +44,12 @@ class KMapsAPI {
   private $results_scope      = 'names';  // Also 'full_text' 
   private $results_view_code  = 'roman.popular'; // the view code that the features' information should be returned in (e.g. "roman.popular")
 
-  public function __construct($domain = 'subjects') {
+  public function __construct($domain = 'subjects', $server = 'production') {
     $this->domain     = $domain;
-    $this->api_url    = 'http://' . $this->domain . '.' . KMapsAPI::KMAPS_URL_STEM;
+    $this->server     = $server;
+    $url_root = $this->domain;
+    if ($this->server == 'development') $url_root = 'dev-' . $this->domain;
+    $this->api_url    = 'http://' . $url_root . '.' . KMapsAPI::KMAPS_URL_STEM;
     $this->debug_mode = variable_get('shanti_kmaps_view_debug_mode',0);
     return $this;
   }
@@ -65,10 +69,6 @@ class KMapsAPI {
     return $this;
   }
   
-  public function getKMapIDsString($delim = ',') {
-    return implode($delim, $this->kmap_ids);
-  }
-
   public function addArgument($key, $value) {
     $this->arguments[$key] = $value;
     return $this;
@@ -96,15 +96,49 @@ class KMapsAPI {
   
   public function setFetchModeToName() {
     $this->fetch_mode = 'by_name';
+    return $this;
   }
 
   public function setFetchModeToID() {
     $this->fetch_mode = 'by_fid';
+    return $this;
   }
 
   public function setFetchModeToIDCached() {
     $this->fetch_mode = 'by_fid_cached';
+    return $this;
   }
+  
+  // GETTERS
+  public function getURL() {
+    return $this->api_url;
+  }
+  
+  public function getKMapIDsString($delim = ',') {
+    return implode($delim, $this->kmap_ids);
+  }
+  
+  // INTERNAL UTILS
+
+  /*
+  // Only works with places ...
+  public function setFetchModeToTopic() {
+    if ($this->domain == 'places') {
+      $this->fetch_mode = 'by_topic';
+      return $this;
+    }
+    return FALSE;
+  }
+
+  // Only works with places ...
+  public function setFetchModeToGeocode() {
+    if ($this->domain == 'places') {
+      $this->fetch_mode = 'by_geo_code';
+      return $this;      
+    }
+    return FALSE;
+  }
+  */ 
 
   /**
    * Executes the request. Returns the response data. This is going
@@ -124,7 +158,7 @@ class KMapsAPI {
     } else {
       // Anomalous; do nothing for now. Or define a default.
     }
-    
+    watchdog("DEV",$raw_url);
     // Let Drupal construct the full URL
     $options = array();
     $options['absolute'] = TRUE;
@@ -144,7 +178,7 @@ class KMapsAPI {
   private function request($request_url) {
     $response = drupal_http_request($request_url);
     if ($response->code != 200) {
-      watchdog('shanti_kmaps_views', 'HTTP error !code received.', array('!code' => $response->code), WATCHDOG_ERROR);
+      watchdog('shanti_kmaps_utils', 'HTTP error !code received.', array('!code' => $response->code), WATCHDOG_ERROR);
       return FALSE;
     }
     $data = json_decode($response->data);
@@ -174,12 +208,14 @@ class KMapsAPI {
         foreach ($data->features as $item) {
           $parsed_data[$item->id] = $item->header;
         }        
-      } elseif ($this->fetch_mode == 'by_fid') {
+      } 
+      elseif ($this->fetch_mode == 'by_fid') {
         foreach ($data->features as $item) {
           $parsed_data[$item->id] = $item->header;
           // Add othe stuff too
         }                
-      } elseif ($this->fetch_mode == 'by_fid_cached') {
+      } 
+      elseif ($this->fetch_mode == 'by_fid_cached') {
         // We append an ancestor path to provide context for the item
         $ancestors = array();
         foreach ($data->feature->ancestors as $ancestor) { $ancestors[] = $ancestor->header; }
@@ -187,16 +223,18 @@ class KMapsAPI {
         $parsed_data[$data->feature->id] = $data->feature->header . '|' . implode('/', $ancestors);        
       }    
     // Raw mode is for other purposes
-    } elseif ($this->parse_mode == 'raw') {
+    } 
+    elseif ($this->parse_mode == 'raw') {
       $parsed_data = $data;
-    } else {
+    } 
+    else {
       // Do nothing for now.
     }
     
     return $parsed_data;
   }
   
-  // SPECIFIC REQUESTS
+  // SPECIFIC REQUESTS -- Not sure if these should be written here or in code that uses this Class
   
   public function searchByName($search_string) { 
     $this->setString($search_string);
