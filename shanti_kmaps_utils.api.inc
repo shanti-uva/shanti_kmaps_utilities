@@ -55,11 +55,14 @@ class KMapsAPI {
   }
   
   public function setString($string) {
+    $this->setFetchModeToName();
     $this->kmap_string = $string;
     return $this;
   }
   
   public function setKMapID($kmap_id) {
+    // Check if integer!
+    $this->setFetchModeToIDCached();
     $this->kmap_id = $kmap_id;
     return $this;
   }
@@ -99,17 +102,20 @@ class KMapsAPI {
     return $this;
   }
 
-  public function setFetchModeToID() {
+  // Set to private?
+  private function setFetchModeToID() {
     $this->fetch_mode = 'by_fid';
     return $this;
   }
 
-  public function setFetchModeToIDCached() {
+  // Set to private?
+  private function setFetchModeToIDCached() {
     $this->fetch_mode = 'by_fid_cached';
     return $this;
   }
   
-  // GETTERS
+  // GETTERS (these don't return the object)
+  
   public function getURL() {
     return $this->api_url;
   }
@@ -158,11 +164,11 @@ class KMapsAPI {
     } else {
       // Anomalous; do nothing for now. Or define a default.
     }
-    watchdog("DEV",$raw_url);
+
     // Let Drupal construct the full URL
     $options = array();
     $options['absolute'] = TRUE;
-    $options['query'] = $this->arguments; // ONLY IF STRING SEARCH
+    $options['query'] = $this->arguments; // APPLIES ONLY IF STRING SEARCH
     $request_url = url($raw_url, $options);
     if ($this->debug_mode) {
       drupal_set_message(t('Request URL: !url', array('!url' => urldecode($request_url))));
@@ -183,11 +189,11 @@ class KMapsAPI {
     }
     $data = json_decode($response->data);
     if (!is_object($data)) {
-      watchdog('shanti_kmaps_views', 'Did not receive valid API response (invalid JSON).', array(), WATCHDOG_ERROR);
+      watchdog('shanti_kmaps_utils', 'Did not receive valid API response (invalid JSON).', array(), WATCHDOG_ERROR);
       return FALSE;
     }
     if (isset($data->error)) {
-      watchdog('shanti_kmaps_views', 'Error !code received: %message', array('!code' => $data->error, '%message' => $data->message), WATCHDOG_ERROR);
+      watchdog('shanti_kmaps_utils', 'Error !code received: %message', array('!code' => $data->error, '%message' => $data->message), WATCHDOG_ERROR);
       return FALSE;
     }
     
@@ -201,8 +207,7 @@ class KMapsAPI {
    */
   private function parse($data) {
     $parsed_data = array();
-    // Autocomplete expexted a simpke id/label hash that will be converted to JSON
-    // May need to specify a parse_mode for views as well
+    // Autocomplete expexts a simple id/label hash that will be converted to JSON
     if ($this->parse_mode == 'autocomplete') {
       if ($this->fetch_mode == 'by_name') {
         foreach ($data->features as $item) {
@@ -220,7 +225,7 @@ class KMapsAPI {
         $ancestors = array();
         foreach ($data->feature->ancestors as $ancestor) { $ancestors[] = $ancestor->header; }
         array_pop($ancestors); // Remove the last ancestor, which is the current item
-        $parsed_data[$data->feature->id] = $data->feature->header . '|' . implode('/', $ancestors);        
+        $parsed_data[$data->feature->id] = $data->feature->header . ' | ' . implode('/', $ancestors); 
       }    
     // Raw mode is for other purposes
     } 
@@ -248,11 +253,125 @@ class KMapsAPI {
     $this->setFetchModeToIDCached(); // Now switch to fetching each ID
     foreach ($parsed_data as $kmap_id => $kmap_label) {
       $r = $this->setKMapID($kmap_id)->execute();
-      $key = "$kmap_id|{$r[$kmap_id]}"; // Not sure if it's best to do this here
+      $key = "$kmap_id | {$r[$kmap_id]}"; // Not sure if it's best to do this here
       $result[$key] = $r[$kmap_id];
     }
     return $result;
   }
+  
+  public function searchByNameGetGraph($search_string) { 
+    $this->setString($search_string);
+    $this->addArgument('per_page', $this->results_per_page);
+    $this->setFetchModeToName();
+    $this->setFormatToJSON();
+    $this->setParseModeToRaw();
+    $rs1 = $this->execute();
+
+    // When multiple IDs are fixed, then use the kmap_ids function and call non-cache URL    
+
+    $this->setFetchModeToIDCached(); // Now switch to fetching each ID
+    $G = array();    
+    for ($i = 0; $i < count($rs1->features); $i++) {
+    	$x = $rs1->features[$i]->id;
+    	$y = $rs1->features[$i]->header;
+			$G['nodes'][$x] = $y;			
+			$rs2 = $this->setKMapID($x)->execute();
+    	$max_j = count($rs2->feature->ancestors) - 1;
+			for ($j = 0; $j <= $max_j; $j++) {
+				$m = $rs2->feature->ancestors[$j]->id;
+				$n = $rs2->feature->ancestors[$j]->header;
+				$G['nodes'][$m] = $n;
+				if ($j > 0) {
+					$o = $rs2->feature->ancestors[$j-1]->id;
+					if (!$G['edges'][$m][$o]) $G['edges'][$o][$m]++;
+				}
+			}
+			
+    }    
+    return $G;
+  }
+
+  public function searchByNameGetTree($search_string) { 
+
+		// Set the parameters for the object  
+    $this->setString($search_string);
+    //$this->addArgument('per_page', $this->results_per_page); // May need to send this
+    $this->addArgument('per_page', 10000); // May need to send this
+    $this->setFetchModeToName();
+    $this->setFormatToJSON();
+    $this->setParseModeToRaw();
     
+    // Run the query
+    $rs1 = $this->execute();
+
+		// For each item, run another query to get more information
+    // When multiple IDs are fixed, then use the kmap_ids function and call non-cache URL    
+    $this->setFetchModeToIDCached(); 
+    $paths = array();    
+    #$nodes = array();
+    for ($i = 0; $i < count($rs1->features); $i++) {
+    	$id = $rs1->features[$i]->id;
+			$rs2 = $this->setKMapID($id)->execute();
+			$path = array();
+			for ($j = 0; $j < count($rs2->feature->ancestors); $j++) {
+				$m = $rs2->feature->ancestors[$j]->id;
+				$n = $rs2->feature->ancestors[$j]->header;
+				#$nodes[$m] = $n;
+				$path[] = "$n F$m";
+			}
+			$paths[] = implode('|', $path);
+    }   
+    sort($paths);
+    
+    $tree = array();
+		foreach ($paths as $path) {
+    	$pathParts = explode('|', $path);
+    	$x = array_pop($pathParts);
+    	$subTree = array($x); // DEFAULT
+    	foreach (array_reverse($pathParts) as $dir) {
+        $subTree = array($dir => $subTree); // DEFAULT
+    	}
+    	$tree = array_merge_recursive($tree, $subTree);
+		}
+    return $tree;
+    
+  }
+
+  public function searchByNameGetList($search_string) { 
+
+		// Set the parameters for the object  
+    $this->setString($search_string);
+    //$this->addArgument('per_page', $this->results_per_page); // May need to send this
+    $this->addArgument('per_page', 10000); // May need to send this
+    $this->setFetchModeToName();
+    $this->setFormatToJSON();
+    $this->setParseModeToRaw();
+    
+    // Run the query
+    $rs1 = $this->execute();
+
+		// For each item, run another query to get more information
+    // When multiple IDs are fixed, then use the kmap_ids function and call non-cache URL    
+
+    $this->setFetchModeToIDCached(); 
+    $list = array('meta' => array(), 'data' => array(), 'dict' => array());
+    $result_count = count($rs1->features);
+		$list['meta']['count'] = $result_count;
+		$list['meta']['search'] = $search_string;
+    for ($i = 0; $i < $result_count; $i++) {
+    	$id 		= $rs1->features[$i]->id;
+    	$header = $rs1->features[$i]->header;    
+			$rs2 		= $this->setKMapID($id)->execute();
+			$list['data'][] = array(
+				'id' => $id,
+				'header' => $header,
+				'ancestors' => $rs2->feature->ancestors,				
+			);
+			$list['dict'][$id]['header'] = $header;
+			$list['dict'][$id]['ancestors'] = $rs2->feature->ancestors;
+		}
+    return $list;    
+  }
+  
 }
 
