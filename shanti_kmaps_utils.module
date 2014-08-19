@@ -67,6 +67,13 @@ function shanti_kmaps_utils_menu() {
     'access arguments' => array('access content'),
     'type' => MENU_CALLBACK,  
   );
+  $items['shanti_kmaps_utils/list-uncached/%/%/%'] = array(
+    'title' => 'KMaps Tree Function',
+    'page callback' => 'shanti_kmaps_utils_list_uncached_func',
+    'page arguments' => array(2,3,4),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,  
+  );
   return $items;
 }
 
@@ -138,6 +145,15 @@ function shanti_kmaps_utils_list_func($domain = 'subjects', $server = 'productio
   if (($server == 'production' || $server = 'development') && ($domain == 'subjects' || $domain == 'places')) {
     $request = new KMapsAPI($domain, $server);
     $result = $request->searchByNameGetList($string); // <-- DIFF
+  }
+	drupal_json_output($result);    
+}
+
+function shanti_kmaps_utils_list_uncached_func($domain = 'subjects', $server = 'production', $string) {
+	$result = array();
+  if (($server == 'production' || $server = 'development') && ($domain == 'subjects' || $domain == 'places')) {
+    $request = new KMapsAPI($domain, $server);
+    $result = $request->searchByNameGetListUncached($string); // <-- DIFF
   }
 	drupal_json_output($result);    
 }

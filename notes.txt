@@ -1,4 +1,3 @@
-  
 "kmapid": [
      "subjects-6213",
      "subjects-6212",

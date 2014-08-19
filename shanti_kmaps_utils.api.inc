@@ -113,7 +113,7 @@ class KMapsAPI {
     $this->fetch_mode = 'by_fid_cached';
     return $this;
   }
-  
+
   // GETTERS (these don't return the object)
   
   public function getURL() {
@@ -338,7 +338,9 @@ class KMapsAPI {
   }
 
   public function searchByNameGetList($search_string) { 
-
+		
+		$t1 = microtime();
+		
 		// Set the parameters for the object  
     $this->setString($search_string);
     //$this->addArgument('per_page', $this->results_per_page); // May need to send this
@@ -370,6 +372,51 @@ class KMapsAPI {
 			$list['dict'][$id]['header'] = $header;
 			$list['dict'][$id]['ancestors'] = $rs2->feature->ancestors;
 		}
+		
+		$t2 = microtime();
+		$t3 = ($t2 - $t1) * 1000;
+		$list['t'] = $t3;
+		// BENCHMARK = t: 287.624
+    return $list;    
+  }
+
+  public function searchByNameGetListUncached($search_string) { 
+		
+		$t1 = microtime();
+		
+		// Set the parameters for the object  
+    $this->setString($search_string);
+    $this->addArgument('per_page', 10000); // May need to send this
+    $this->setFetchModeToName();
+    $this->setFormatToJSON();
+    $this->setParseModeToRaw();
+    
+    // Run the query
+    $rs1 = $this->execute();
+		$result_count = count($rs1->features);
+    for ($i = 0; $i < $result_count; $i++) {
+    	$id = $rs1->features[$i]->id;
+    	$this->pushKMapIDs($id);
+    }
+
+    $list = array('meta' => array(), 'data' => array(), 'dict' => array());
+		$list['meta']['count'] = $result_count;
+		$list['meta']['search'] = $search_string;
+    $this->setFetchModeToID(); 
+		$rs2 = $this->execute();
+		foreach ($rs2->features as $f) {
+			$list['data'][] = array(
+				'header' 		=> $f->header,
+				'id' 				=> $f->id,
+				'ancestors' => $f->ancestors,
+			);
+			$list['dict'][$f->id]['header'] 		= $f->header;
+			$list['dict'][$f->id]['ancestors'] 	= $f->ancestors;
+		}
+		
+		$t2 = microtime();
+		$t3 = ($t2 - $t1) * 1000;
+		$list['t'] = $t3;
     return $list;    
   }
   
